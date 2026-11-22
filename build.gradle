@@ -1,0 +1,415 @@
+import java.awt.Color
+import java.awt.RenderingHints
+import java.awt.image.BufferedImage
+import javax.imageio.ImageIO
+
+plugins {
+    id 'java'
+    id 'net.neoforged.moddev' version '2.0.78'
+}
+
+version = '1.0.0'
+group = 'com.unusedunlocked'
+
+base {
+    archivesName = 'unused-unlocked'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+neoForge {
+    version = '21.1.172'
+}
+
+// ---------------------------------------------------------------------------
+// The whole mod (Java sources, resources and the icon) is generated here so the
+// repo only needs build.gradle + build.yml.
+// ---------------------------------------------------------------------------
+def genDir = layout.buildDirectory.dir('generated/unusedunlocked')
+def genJava = genDir.map { it.dir('java') }
+def genRes = genDir.map { it.dir('resources') }
+
+sourceSets.main.java.srcDir(genJava)
+sourceSets.main.resources.srcDir(genRes)
+
+tasks.register('generateModFiles') {
+    outputs.upToDateWhen { false }
+    doLast {
+        System.setProperty('java.awt.headless', 'true')
+
+        def root = genDir.get().asFile
+        delete(root)
+        def javaRoot = new File(root, 'java/com/unusedunlocked')
+        def resRoot = new File(root, 'resources')
+
+        def writeFile = { File f, String text ->
+            f.parentFile.mkdirs()
+            f.text = text
+        }
+
+        // ---------------- icon (logo + item texture) ----------------
+        def drawCube = { int size, boolean background, File out ->
+            def img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB)
+            def g = img.createGraphics()
+            if (size > 32) {
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+            }
+            if (background) {
+                g.setColor(new Color(0x1E1B2E))
+                int r = size.intdiv(6)
+                g.fillRoundRect(0, 0, size, size, r, r)
+            }
+            double s = (size / 16.0d) * (background ? 0.75d : 1.0d)
+            double off = background ? size * 0.125d : 0.0d
+            def poly = { List pts, Color fill, Color line ->
+                int[] xs = pts.collect { (int) Math.round(it[0] * s + off) } as int[]
+                int[] ys = pts.collect { (int) Math.round(it[1] * s + off) } as int[]
+                g.setColor(fill)
+                g.fillPolygon(xs, ys, xs.length)
+                g.setColor(line)
+                g.drawPolygon(xs, ys, xs.length)
+            }
+            def outline = new Color(0x2A1F4D)
+            poly([[8d, 1d], [14d, 4.5d], [8d, 8d], [2d, 4.5d]], new Color(0xB48CFF), outline)
+            poly([[2d, 4.5d], [8d, 8d], [8d, 15d], [2d, 11.5d]], new Color(0x7B52D6), outline)
+            poly([[14d, 4.5d], [8d, 8d], [8d, 15d], [14d, 11.5d]], new Color(0x5A38A8), outline)
+            // little gold "unlocked" dot on the front faces
+            g.setColor(new Color(0xFFD54F))
+            int dot = Math.max(2, (int) Math.round(2 * s))
+            g.fillRect((int) Math.round(7 * s + off), (int) Math.round(9 * s + off), dot, dot)
+            g.dispose()
+            out.parentFile.mkdirs()
+            ImageIO.write(img, 'png', out)
+        }
+        drawCube(128, true, new File(resRoot, 'logo.png'))
+        drawCube(16, false, new File(resRoot, 'assets/unusedunlocked/textures/item/block_placer.png'))
+
+        // ---------------- resources ----------------
+        writeFile(new File(resRoot, 'META-INF/neoforge.mods.toml'), '''modLoader="javafml"
+loaderVersion="[1,)"
+license="MIT"
+
+[[mods]]
+modId="unusedunlocked"
+version="1.0.0"
+displayName="Unused Unlocked"
+logoFile="logo.png"
+authors="You"
+description="Type test in chat to get a row of chests holding every unused item and block (vanilla and modded). Unused blocks without items become placeable in creative and survival."
+
+[[dependencies.unusedunlocked]]
+modId="neoforge"
+type="required"
+versionRange="[21.1,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.unusedunlocked]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1,1.22)"
+ordering="NONE"
+side="BOTH"
+''')
+
+        writeFile(new File(resRoot, 'assets/unusedunlocked/lang/en_us.json'), '''{
+  "item.unusedunlocked.block_placer": "Unused Block Placer"
+}
+''')
+
+        writeFile(new File(resRoot, 'assets/unusedunlocked/models/item/block_placer.json'), '''{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "unusedunlocked:item/block_placer"
+  }
+}
+''')
+
+        // ---------------- Java ----------------
+        writeFile(new File(javaRoot, 'UnusedUnlocked.java'), '''package com.unusedunlocked;
+
+import com.mojang.logging.LogUtils;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.Item;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.ServerChatEvent;
+import net.neoforged.neoforge.registries.DeferredItem;
+import net.neoforged.neoforge.registries.DeferredRegister;
+import org.slf4j.Logger;
+
+@Mod(UnusedUnlocked.MODID)
+public class UnusedUnlocked {
+    public static final String MODID = "unusedunlocked";
+    public static final Logger LOGGER = LogUtils.getLogger();
+
+    public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MODID);
+    public static final DeferredItem<BlockPlacerItem> BLOCK_PLACER =
+            ITEMS.registerItem("block_placer", BlockPlacerItem::new, new Item.Properties());
+
+    public UnusedUnlocked(IEventBus modBus) {
+        ITEMS.register(modBus);
+        NeoForge.EVENT_BUS.addListener(UnusedUnlocked::onChat);
+    }
+
+    private static void onChat(ServerChatEvent event) {
+        if (!"test".equalsIgnoreCase(event.getRawText().trim())) {
+            return;
+        }
+        event.setCanceled(true);
+        ServerPlayer player = event.getPlayer();
+        player.server.execute(() -> ChestRow.spawn(player));
+    }
+}
+''')
+
+        writeFile(new File(javaRoot, 'BlockPlacerItem.java'), '''package com.unusedunlocked;
+
+import java.util.List;
+import java.util.Optional;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.ItemLore;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.gameevent.GameEvent;
+import net.minecraft.world.phys.shapes.CollisionContext;
+
+/**
+ * Stands in for blocks that have no item of their own. The block it places is
+ * stored in the item's custom data, so it works for vanilla and modded blocks.
+ */
+public class BlockPlacerItem extends Item {
+    public static final String TAG = "unused_block";
+
+    public BlockPlacerItem(Properties properties) {
+        super(properties);
+    }
+
+    public static ItemStack create(Block block) {
+        String id = BuiltInRegistries.BLOCK.getKey(block).toString();
+        ItemStack stack = new ItemStack(UnusedUnlocked.BLOCK_PLACER.get(), 64);
+        CompoundTag tag = new CompoundTag();
+        tag.putString(TAG, id);
+        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+        stack.set(DataComponents.CUSTOM_NAME,
+                Component.literal("Block: ").append(block.getName()).withStyle(s -> s.withItalic(false)));
+        stack.set(DataComponents.LORE,
+                new ItemLore(List.of(Component.literal(id).withStyle(ChatFormatting.DARK_GRAY))));
+        stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
+        return stack;
+    }
+
+    private static Optional<Block> getBlock(ItemStack stack) {
+        CustomData data = stack.get(DataComponents.CUSTOM_DATA);
+        if (data == null) {
+            return Optional.empty();
+        }
+        String id = data.copyTag().getString(TAG);
+        ResourceLocation rl = ResourceLocation.tryParse(id);
+        if (rl == null) {
+            return Optional.empty();
+        }
+        return BuiltInRegistries.BLOCK.getOptional(rl);
+    }
+
+    @Override
+    public InteractionResult useOn(UseOnContext context) {
+        Level level = context.getLevel();
+        Player player = context.getPlayer();
+        ItemStack stack = context.getItemInHand();
+
+        Optional<Block> optional = getBlock(stack);
+        if (optional.isEmpty()) {
+            return InteractionResult.FAIL;
+        }
+        Block block = optional.get();
+
+        BlockPlaceContext placeContext = new BlockPlaceContext(context);
+        if (!placeContext.canPlace()) {
+            return InteractionResult.FAIL;
+        }
+        BlockPos pos = placeContext.getClickedPos();
+
+        BlockState state = null;
+        try {
+            state = block.getStateForPlacement(placeContext);
+        } catch (Throwable ignored) {
+            // fall back to the default state below
+        }
+        if (state == null) {
+            state = block.defaultBlockState();
+        }
+
+        CollisionContext collision = player != null ? CollisionContext.of(player) : CollisionContext.empty();
+        if (!level.isUnobstructed(state, pos, collision)) {
+            return InteractionResult.FAIL;
+        }
+        if (!level.setBlock(pos, state, 11)) {
+            return InteractionResult.FAIL;
+        }
+
+        block.setPlacedBy(level, pos, state, player, stack);
+
+        SoundType sound = state.getSoundType(level, pos, player);
+        level.playSound(player, pos, sound.getPlaceSound(), SoundSource.BLOCKS,
+                (sound.getVolume() + 1.0F) / 2.0F, sound.getPitch() * 0.8F);
+        level.gameEvent(GameEvent.BLOCK_PLACE, pos, GameEvent.Context.of(player, state));
+
+        if (player == null || !player.getAbilities().instabuild) {
+            stack.shrink(1);
+        }
+        return InteractionResult.sidedSuccess(level.isClientSide);
+    }
+}
+''')
+
+        writeFile(new File(javaRoot, 'ChestRow.java'), '''package com.unusedunlocked;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.flag.FeatureFlagSet;
+import net.minecraft.world.item.CreativeModeTab;
+import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
+
+public final class ChestRow {
+    private static final int SLOTS = 27;
+    private static final int PER_ROW = 32;
+
+    private ChestRow() {
+    }
+
+    public static void spawn(ServerPlayer player) {
+        ServerLevel level = player.serverLevel();
+        FeatureFlagSet flags = level.enabledFeatures();
+
+        // 1) Items that appear in no creative tab (operator-only items count as unused too).
+        Set<Item> listed = new HashSet<>();
+        try {
+            CreativeModeTabs.tryRebuildTabContents(flags, false, level.registryAccess());
+            for (CreativeModeTab tab : BuiltInRegistries.CREATIVE_MODE_TAB) {
+                if (tab.getType() != CreativeModeTab.Type.CATEGORY) {
+                    continue;
+                }
+                for (ItemStack stack : tab.getDisplayItems()) {
+                    listed.add(stack.getItem());
+                }
+            }
+        } catch (Throwable t) {
+            UnusedUnlocked.LOGGER.warn("Could not read creative tabs, listing every item", t);
+        }
+
+        List<Item> items = new ArrayList<>();
+        for (Item item : BuiltInRegistries.ITEM) {
+            if (item == Items.AIR || item == UnusedUnlocked.BLOCK_PLACER.get()) {
+                continue;
+            }
+            if (!item.isEnabled(flags) || listed.contains(item)) {
+                continue;
+            }
+            items.add(item);
+        }
+        items.sort(Comparator.comparing(i -> BuiltInRegistries.ITEM.getKey(i).toString()));
+
+        // 2) Blocks that have no item at all - they get a placer item.
+        List<Block> blocks = new ArrayList<>();
+        for (Block block : BuiltInRegistries.BLOCK) {
+            if (block.asItem() != Items.AIR) {
+                continue;
+            }
+            if (block.defaultBlockState().isAir() || !block.isEnabled(flags)) {
+                continue;
+            }
+            blocks.add(block);
+        }
+        blocks.sort(Comparator.comparing(b -> BuiltInRegistries.BLOCK.getKey(b).toString()));
+
+        List<ItemStack> all = new ArrayList<>();
+        for (Item item : items) {
+            all.add(new ItemStack(item));
+        }
+        for (Block block : blocks) {
+            all.add(BlockPlacerItem.create(block));
+        }
+
+        int chestCount = (all.size() + SLOTS - 1) / SLOTS;
+        if (chestCount == 0) {
+            player.sendSystemMessage(Component.literal("No unused items or blocks found."));
+            return;
+        }
+
+        Direction forward = player.getDirection();
+        Direction side = forward.getClockWise();
+        BlockPos origin = player.blockPosition().relative(forward, 3);
+        int cols = Math.min(chestCount, PER_ROW);
+
+        for (int c = 0; c < chestCount; c++) {
+            int row = c / PER_ROW;
+            int col = c % PER_ROW;
+            BlockPos pos = origin.relative(side, col - cols / 2).relative(forward, row * 2);
+
+            level.removeBlockEntity(pos);
+            level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
+            level.setBlock(pos.above(), Blocks.AIR.defaultBlockState(), 2);
+            level.setBlock(pos, Blocks.CHEST.defaultBlockState()
+                    .setValue(ChestBlock.FACING, forward.getOpposite()), 3);
+
+            if (level.getBlockEntity(pos) instanceof ChestBlockEntity chest) {
+                chest.setCustomName(Component.literal("Unused " + (c + 1) + "/" + chestCount));
+                for (int slot = 0; slot < SLOTS; slot++) {
+                    int index = c * SLOTS + slot;
+                    if (index >= all.size()) {
+                        break;
+                    }
+                    chest.setItem(slot, all.get(index));
+                }
+                chest.setChanged();
+            }
+        }
+
+        player.sendSystemMessage(Component.literal("Spawned " + chestCount + " chests: "
+                + items.size() + " unused items and " + blocks.size() + " placeable unused blocks."));
+    }
+}
+''')
+    }
+}
+
+tasks.named('compileJava') {
+    dependsOn 'generateModFiles'
+}
+tasks.named('processResources') {
+    dependsOn 'generateModFiles'
+}
