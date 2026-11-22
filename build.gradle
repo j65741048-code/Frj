@@ -387,7 +387,6 @@ public final class ChestRow {
                     .setValue(ChestBlock.FACING, forward.getOpposite()), 3);
 
             if (level.getBlockEntity(pos) instanceof ChestBlockEntity chest) {
-                chest.setCustomName(Component.literal("Unused " + (c + 1) + "/" + chestCount));
                 for (int slot = 0; slot < SLOTS; slot++) {
                     int index = c * SLOTS + slot;
                     if (index >= all.size()) {
