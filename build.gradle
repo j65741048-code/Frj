@@ -8,7 +8,7 @@ plugins {
     id 'net.neoforged.moddev' version '2.0.78'
 }
 
-version = '1.0.0'
+version = '1.1.0'
 group = 'com.unusedunlocked'
 
 base {
@@ -47,8 +47,8 @@ tasks.register('generateModFiles') {
             f.text = text
         }
 
-        // ---------------- icon (logo + item texture) ----------------
-        def drawCube = { int size, boolean background, File out ->
+        // ---------------- icons (logo + item textures) ----------------
+        def drawCube = { int size, boolean background, File out, int cTop, int cLeft, int cRight ->
             def img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB)
             def g = img.createGraphics()
             if (size > 32) {
@@ -70,10 +70,9 @@ tasks.register('generateModFiles') {
                 g.drawPolygon(xs, ys, xs.length)
             }
             def outline = new Color(0x2A1F4D)
-            poly([[8d, 1d], [14d, 4.5d], [8d, 8d], [2d, 4.5d]], new Color(0xB48CFF), outline)
-            poly([[2d, 4.5d], [8d, 8d], [8d, 15d], [2d, 11.5d]], new Color(0x7B52D6), outline)
-            poly([[14d, 4.5d], [8d, 8d], [8d, 15d], [14d, 11.5d]], new Color(0x5A38A8), outline)
-            // little gold "unlocked" dot on the front faces
+            poly([[8d, 1d], [14d, 4.5d], [8d, 8d], [2d, 4.5d]], new Color(cTop), outline)
+            poly([[2d, 4.5d], [8d, 8d], [8d, 15d], [2d, 11.5d]], new Color(cLeft), outline)
+            poly([[14d, 4.5d], [8d, 8d], [8d, 15d], [14d, 11.5d]], new Color(cRight), outline)
             g.setColor(new Color(0xFFD54F))
             int dot = Math.max(2, (int) Math.round(2 * s))
             g.fillRect((int) Math.round(7 * s + off), (int) Math.round(9 * s + off), dot, dot)
@@ -81,8 +80,9 @@ tasks.register('generateModFiles') {
             out.parentFile.mkdirs()
             ImageIO.write(img, 'png', out)
         }
-        drawCube(128, true, new File(resRoot, 'logo.png'))
-        drawCube(16, false, new File(resRoot, 'assets/unusedunlocked/textures/item/block_placer.png'))
+        drawCube(128, true, new File(resRoot, 'logo.png'), 0xB48CFF, 0x7B52D6, 0x5A38A8)
+        drawCube(16, false, new File(resRoot, 'assets/unusedunlocked/textures/item/block_placer.png'), 0xB48CFF, 0x7B52D6, 0x5A38A8)
+        drawCube(16, false, new File(resRoot, 'assets/unusedunlocked/textures/item/mob_placer.png'), 0xFF9C7A, 0xD65A3A, 0xA83A22)
 
         // ---------------- resources ----------------
         writeFile(new File(resRoot, 'META-INF/neoforge.mods.toml'), '''modLoader="javafml"
@@ -91,11 +91,11 @@ license="MIT"
 
 [[mods]]
 modId="unusedunlocked"
-version="1.0.0"
+version="1.1.0"
 displayName="Unused Unlocked"
 logoFile="logo.png"
 authors="You"
-description="Type test in chat to get a row of chests holding every unused item and block (vanilla and modded). Unused blocks without items become placeable in creative and survival."
+description="Type test in chat (singleplayer or multiplayer) to add every unused item, block, armor piece and mob, vanilla and modded, to its creative inventory tab. Blocks and mobs with no item get placer items that work in creative and survival."
 
 [[dependencies.unusedunlocked]]
 modId="neoforge"
@@ -113,7 +113,8 @@ side="BOTH"
 ''')
 
         writeFile(new File(resRoot, 'assets/unusedunlocked/lang/en_us.json'), '''{
-  "item.unusedunlocked.block_placer": "Unused Block Placer"
+  "item.unusedunlocked.block_placer": "Unused Block Placer",
+  "item.unusedunlocked.mob_placer": "Unused Mob Placer"
 }
 ''')
 
@@ -125,16 +126,23 @@ side="BOTH"
 }
 ''')
 
+        writeFile(new File(resRoot, 'assets/unusedunlocked/models/item/mob_placer.json'), '''{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "unusedunlocked:item/mob_placer"
+  }
+}
+''')
+
         // ---------------- Java ----------------
         writeFile(new File(javaRoot, 'UnusedUnlocked.java'), '''package com.unusedunlocked;
 
 import com.mojang.logging.LogUtils;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
+import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.ServerChatEvent;
+import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import org.slf4j.Logger;
@@ -147,19 +155,14 @@ public class UnusedUnlocked {
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MODID);
     public static final DeferredItem<BlockPlacerItem> BLOCK_PLACER =
             ITEMS.registerItem("block_placer", BlockPlacerItem::new, new Item.Properties());
+    public static final DeferredItem<MobPlacerItem> MOB_PLACER =
+            ITEMS.registerItem("mob_placer", MobPlacerItem::new, new Item.Properties());
 
     public UnusedUnlocked(IEventBus modBus) {
         ITEMS.register(modBus);
-        NeoForge.EVENT_BUS.addListener(UnusedUnlocked::onChat);
-    }
-
-    private static void onChat(ServerChatEvent event) {
-        if (!"test".equalsIgnoreCase(event.getRawText().trim())) {
-            return;
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            ClientHandler.init();
         }
-        event.setCanceled(true);
-        ServerPlayer player = event.getPlayer();
-        player.server.execute(() -> ChestRow.spawn(player));
     }
 }
 ''')
@@ -192,8 +195,8 @@ import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.shapes.CollisionContext;
 
 /**
- * Stands in for blocks that have no item of their own. The block it places is
- * stored in the item's custom data, so it works for vanilla and modded blocks.
+ * Stands in for blocks that have no usable item of their own. The block it places
+ * is stored in the item's custom data, so it works for vanilla and modded blocks.
  */
 public class BlockPlacerItem extends Item {
     public static final String TAG = "unused_block";
@@ -280,60 +283,253 @@ public class BlockPlacerItem extends Item {
 }
 ''')
 
-        writeFile(new File(javaRoot, 'ChestRow.java'), '''package com.unusedunlocked;
+        writeFile(new File(javaRoot, 'MobPlacerItem.java'), '''package com.unusedunlocked;
+
+import java.util.List;
+import java.util.Optional;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.ItemLore;
+import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.gameevent.GameEvent;
+
+/** Spawn egg stand-in for mobs that have no spawn egg (vanilla and modded). */
+public class MobPlacerItem extends Item {
+    public static final String TAG = "unused_mob";
+
+    public MobPlacerItem(Properties properties) {
+        super(properties);
+    }
+
+    public static ItemStack create(EntityType<?> type) {
+        String id = BuiltInRegistries.ENTITY_TYPE.getKey(type).toString();
+        ItemStack stack = new ItemStack(UnusedUnlocked.MOB_PLACER.get(), 64);
+        CompoundTag tag = new CompoundTag();
+        tag.putString(TAG, id);
+        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+        stack.set(DataComponents.CUSTOM_NAME,
+                Component.literal("Mob: ").append(type.getDescription()).withStyle(s -> s.withItalic(false)));
+        stack.set(DataComponents.LORE,
+                new ItemLore(List.of(Component.literal(id).withStyle(ChatFormatting.DARK_GRAY))));
+        stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
+        return stack;
+    }
+
+    private static Optional<EntityType<?>> getType(ItemStack stack) {
+        CustomData data = stack.get(DataComponents.CUSTOM_DATA);
+        if (data == null) {
+            return Optional.empty();
+        }
+        ResourceLocation rl = ResourceLocation.tryParse(data.copyTag().getString(TAG));
+        if (rl == null) {
+            return Optional.empty();
+        }
+        return BuiltInRegistries.ENTITY_TYPE.getOptional(rl);
+    }
+
+    @Override
+    public InteractionResult useOn(UseOnContext context) {
+        Level level = context.getLevel();
+        if (!(level instanceof ServerLevel server)) {
+            return InteractionResult.SUCCESS;
+        }
+        ItemStack stack = context.getItemInHand();
+        Optional<EntityType<?>> optional = getType(stack);
+        if (optional.isEmpty()) {
+            return InteractionResult.FAIL;
+        }
+
+        Player player = context.getPlayer();
+        BlockPos pos = context.getClickedPos();
+        Direction face = context.getClickedFace();
+        BlockState state = level.getBlockState(pos);
+        BlockPos spawnPos = state.getCollisionShape(level, pos).isEmpty() ? pos : pos.relative(face);
+
+        Entity entity = optional.get().spawn(server, stack, player, spawnPos, MobSpawnType.SPAWN_EGG, true,
+                !pos.equals(spawnPos) && face == Direction.UP);
+        if (entity == null) {
+            return InteractionResult.FAIL;
+        }
+
+        if (player == null || !player.getAbilities().instabuild) {
+            stack.shrink(1);
+        }
+        level.gameEvent(player, GameEvent.ENTITY_PLACE, pos);
+        return InteractionResult.CONSUME;
+    }
+}
+''')
+
+        writeFile(new File(javaRoot, 'ClientHandler.java'), '''package com.unusedunlocked;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.flag.FeatureFlagSet;
+import net.minecraft.world.item.ArmorItem;
+import net.minecraft.world.item.ArrowItem;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.DiggerItem;
+import net.minecraft.world.item.FishingRodItem;
+import net.minecraft.world.item.FlintAndSteelItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.ShearsItem;
+import net.minecraft.world.item.ShieldItem;
+import net.minecraft.world.item.SpawnEggItem;
+import net.minecraft.world.item.SwordItem;
+import net.minecraft.world.item.TridentItem;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.BasePressurePlateBlock;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.ChestBlock;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.BushBlock;
+import net.minecraft.world.level.block.ButtonBlock;
+import net.minecraft.world.level.block.DiodeBlock;
+import net.minecraft.world.level.block.EntityBlock;
+import net.minecraft.world.level.block.PistonBaseBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.client.event.ClientChatEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
+import net.neoforged.neoforge.common.NeoForge;
 
-public final class ChestRow {
-    private static final int SLOTS = 27;
-    private static final int PER_ROW = 32;
-
-    private ChestRow() {
+/**
+ * Client side: typing "test" adds every unused item, block (as a placer item),
+ * armor piece and mob (as a placer item) to the matching creative tab.
+ */
+public final class ClientHandler {
+    private record Placement(ResourceLocation tab, ItemStack stack) {
     }
 
-    public static void spawn(ServerPlayer player) {
-        ServerLevel level = player.serverLevel();
-        FeatureFlagSet flags = level.enabledFeatures();
+    private static List<Placement> cache = null;
+    private static boolean unlocked = false;
+    private static int itemCount = 0;
+    private static int blockCount = 0;
+    private static int mobCount = 0;
 
-        // 1) Items that appear in no creative tab (operator-only items count as unused too).
-        Set<Item> listed = new HashSet<>();
+    private ClientHandler() {
+    }
+
+    public static void init() {
+        NeoForge.EVENT_BUS.addListener(ClientHandler::onChat);
+        NeoForge.EVENT_BUS.addListener(ClientHandler::onScreenInit);
+    }
+
+    private static void onChat(ClientChatEvent event) {
+        if (!"test".equalsIgnoreCase(event.getMessage().trim())) {
+            return;
+        }
+        event.setCanceled(true);
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null) {
+            return;
+        }
         try {
-            CreativeModeTabs.tryRebuildTabContents(flags, false, level.registryAccess());
-            for (CreativeModeTab tab : BuiltInRegistries.CREATIVE_MODE_TAB) {
-                if (tab.getType() != CreativeModeTab.Type.CATEGORY) {
-                    continue;
-                }
-                for (ItemStack stack : tab.getDisplayItems()) {
-                    listed.add(stack.getItem());
-                }
+            if (cache == null) {
+                build(player);
             }
+            unlocked = true;
+            apply();
+            player.displayClientMessage(Component.literal("Unused Unlocked: added " + itemCount
+                    + " items, " + blockCount + " blocks and " + mobCount
+                    + " mobs to the creative tabs. Open your creative inventory."), false);
         } catch (Throwable t) {
-            UnusedUnlocked.LOGGER.warn("Could not read creative tabs, listing every item", t);
+            UnusedUnlocked.LOGGER.error("Could not unlock unused content", t);
+            player.displayClientMessage(Component.literal("Unused Unlocked: something went wrong, see the log."), false);
+        }
+    }
+
+    private static void onScreenInit(ScreenEvent.Init.Pre event) {
+        if (unlocked && event.getScreen() instanceof CreativeModeInventoryScreen) {
+            try {
+                apply();
+            } catch (Throwable t) {
+                UnusedUnlocked.LOGGER.error("Could not update creative tabs", t);
+            }
+        }
+    }
+
+    private static void apply() {
+        if (!unlocked || cache == null) {
+            return;
+        }
+        CreativeModeTab search = CreativeModeTabs.searchTab();
+        for (Placement placement : cache) {
+            Optional<CreativeModeTab> tab = BuiltInRegistries.CREATIVE_MODE_TAB.getOptional(placement.tab());
+            if (tab.isPresent()) {
+                tab.get().getDisplayItems().add(placement.stack().copy());
+                tab.get().getSearchTabDisplayItems().add(placement.stack().copy());
+            }
+            search.getDisplayItems().add(placement.stack().copy());
+            search.getSearchTabDisplayItems().add(placement.stack().copy());
+        }
+    }
+
+    private static void build(LocalPlayer player) {
+        Level level = player.level();
+        FeatureFlagSet flags = player.connection.enabledFeatures();
+
+        // Make sure the creative tabs are filled, then see what they already contain.
+        CreativeModeTabs.tryRebuildTabContents(flags, false, level.registryAccess());
+        Set<Item> listed = new HashSet<>();
+        Map<String, ResourceLocation> modTabs = new HashMap<>();
+        for (CreativeModeTab tab : BuiltInRegistries.CREATIVE_MODE_TAB) {
+            ResourceLocation tabId = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab);
+            if (tab.getType() != CreativeModeTab.Type.CATEGORY) {
+                continue;
+            }
+            for (ItemStack stack : tab.getDisplayItems()) {
+                listed.add(stack.getItem());
+            }
+            if (tabId != null && !"minecraft".equals(tabId.getNamespace())) {
+                modTabs.putIfAbsent(tabId.getNamespace(), tabId);
+            }
         }
 
+        List<Placement> result = new ArrayList<>();
+
+        // 1) Unused items (this includes unused armor, tools, food, spawn eggs...).
         List<Item> items = new ArrayList<>();
         for (Item item : BuiltInRegistries.ITEM) {
-            if (item == Items.AIR || item == UnusedUnlocked.BLOCK_PLACER.get()) {
+            if (item == Items.AIR || item == UnusedUnlocked.BLOCK_PLACER.get()
+                    || item == UnusedUnlocked.MOB_PLACER.get()) {
                 continue;
             }
             if (!item.isEnabled(flags) || listed.contains(item)) {
@@ -342,8 +538,14 @@ public final class ChestRow {
             items.add(item);
         }
         items.sort(Comparator.comparing(i -> BuiltInRegistries.ITEM.getKey(i).toString()));
+        for (Item item : items) {
+            ItemStack stack = new ItemStack(item);
+            ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+            result.add(new Placement(tabFor(id, categorizeItem(item, stack), modTabs), stack));
+        }
+        itemCount = items.size();
 
-        // 2) Blocks that have no item at all - they get a placer item.
+        // 2) Blocks that have no item at all (couplers, portals, plants...) get a placer item.
         List<Block> blocks = new ArrayList<>();
         for (Block block : BuiltInRegistries.BLOCK) {
             if (block.asItem() != Items.AIR) {
@@ -355,51 +557,88 @@ public final class ChestRow {
             blocks.add(block);
         }
         blocks.sort(Comparator.comparing(b -> BuiltInRegistries.BLOCK.getKey(b).toString()));
-
-        List<ItemStack> all = new ArrayList<>();
-        for (Item item : items) {
-            all.add(new ItemStack(item));
-        }
         for (Block block : blocks) {
-            all.add(BlockPlacerItem.create(block));
+            ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
+            result.add(new Placement(tabFor(id, categorizeBlock(block), modTabs), BlockPlacerItem.create(block)));
         }
+        blockCount = blocks.size();
 
-        int chestCount = (all.size() + SLOTS - 1) / SLOTS;
-        if (chestCount == 0) {
-            player.sendSystemMessage(Component.literal("No unused items or blocks found."));
-            return;
-        }
-
-        Direction forward = player.getDirection();
-        Direction side = forward.getClockWise();
-        BlockPos origin = player.blockPosition().relative(forward, 3);
-        int cols = Math.min(chestCount, PER_ROW);
-
-        for (int c = 0; c < chestCount; c++) {
-            int row = c / PER_ROW;
-            int col = c % PER_ROW;
-            BlockPos pos = origin.relative(side, col - cols / 2).relative(forward, row * 2);
-
-            level.removeBlockEntity(pos);
-            level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
-            level.setBlock(pos.above(), Blocks.AIR.defaultBlockState(), 2);
-            level.setBlock(pos, Blocks.CHEST.defaultBlockState()
-                    .setValue(ChestBlock.FACING, forward.getOpposite()), 3);
-
-            if (level.getBlockEntity(pos) instanceof ChestBlockEntity chest) {
-                for (int slot = 0; slot < SLOTS; slot++) {
-                    int index = c * SLOTS + slot;
-                    if (index >= all.size()) {
-                        break;
+        // 3) Mobs without a spawn egg get a placer item.
+        List<EntityType<?>> types = new ArrayList<>();
+        for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
+            if (!type.canSummon() || !type.isEnabled(flags) || SpawnEggItem.byId(type) != null) {
+                continue;
+            }
+            try {
+                Entity entity = type.create(level);
+                if (entity != null) {
+                    if (entity instanceof Mob) {
+                        types.add(type);
                     }
-                    chest.setItem(slot, all.get(index));
+                    entity.discard();
                 }
-                chest.setChanged();
+            } catch (Throwable ignored) {
+                // skip entities that cannot be created here
             }
         }
+        types.sort(Comparator.comparing(t -> BuiltInRegistries.ENTITY_TYPE.getKey(t).toString()));
+        for (EntityType<?> type : types) {
+            ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+            result.add(new Placement(tabFor(id, CreativeModeTabs.SPAWN_EGGS.location(), modTabs),
+                    MobPlacerItem.create(type)));
+        }
+        mobCount = types.size();
 
-        player.sendSystemMessage(Component.literal("Spawned " + chestCount + " chests: "
-                + items.size() + " unused items and " + blocks.size() + " placeable unused blocks."));
+        cache = result;
+    }
+
+    /** Modded content goes into its own mod's creative tab when it has one. */
+    private static ResourceLocation tabFor(ResourceLocation id, ResourceLocation fallback,
+                                           Map<String, ResourceLocation> modTabs) {
+        if (id != null && !"minecraft".equals(id.getNamespace())) {
+            ResourceLocation modTab = modTabs.get(id.getNamespace());
+            if (modTab != null) {
+                return modTab;
+            }
+        }
+        return fallback;
+    }
+
+    private static ResourceLocation categorizeItem(Item item, ItemStack stack) {
+        if (item instanceof SpawnEggItem) {
+            return CreativeModeTabs.SPAWN_EGGS.location();
+        }
+        if (item instanceof ArmorItem || item instanceof ShieldItem || item instanceof BowItem
+                || item instanceof CrossbowItem || item instanceof TridentItem || item instanceof SwordItem
+                || item instanceof ArrowItem) {
+            return CreativeModeTabs.COMBAT.location();
+        }
+        if (item instanceof DiggerItem || item instanceof ShearsItem || item instanceof FlintAndSteelItem
+                || item instanceof FishingRodItem) {
+            return CreativeModeTabs.TOOLS_AND_UTILITIES.location();
+        }
+        if (stack.has(DataComponents.FOOD)) {
+            return CreativeModeTabs.FOOD_AND_DRINKS.location();
+        }
+        if (item instanceof BlockItem blockItem) {
+            return categorizeBlock(blockItem.getBlock());
+        }
+        return CreativeModeTabs.INGREDIENTS.location();
+    }
+
+    private static ResourceLocation categorizeBlock(Block block) {
+        BlockState state = block.defaultBlockState();
+        if (state.isSignalSource() || block instanceof DiodeBlock || block instanceof PistonBaseBlock
+                || block instanceof BasePressurePlateBlock || block instanceof ButtonBlock) {
+            return CreativeModeTabs.REDSTONE_BLOCKS.location();
+        }
+        if (block instanceof EntityBlock) {
+            return CreativeModeTabs.FUNCTIONAL_BLOCKS.location();
+        }
+        if (block instanceof BushBlock || state.is(BlockTags.LEAVES) || state.is(BlockTags.LOGS)) {
+            return CreativeModeTabs.NATURAL_BLOCKS.location();
+        }
+        return CreativeModeTabs.BUILDING_BLOCKS.location();
     }
 }
 ''')
