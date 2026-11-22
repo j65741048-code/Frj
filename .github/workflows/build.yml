@@ -15,6 +15,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Add mod icon (brass train)
+        shell: bash
+        run: |
+          mkdir -p src/main/resources
+          echo "iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAADxUlEQVR4nO3dMWgUQRTG8VxIIZhKVCzEQlNYWIhIcigclpZiEUTshMRCRAKKhZWIiEIQsVDBTkRSiKWlHCgmSIhgkSJJIRaiIggRrNTWeSf7HGZ293a//69bb+92MR9v3s3O7XZGIu2dOPg79j2ozsbaSidm/9GyTgTNQADEEQBxY94OjPl5LS69CranJo9m/fwv334Ef68d27YW9gRUAHEEQBwBEDcwPjDm52XH/LrZnoAKII4AiCMA4jqM+dWquifw5hmoAOIIgDgCII4eoGa5e4LYawtUAHEEQBwBEEcAxBEAcQRAHAEQxzxAxZ5c+Jr1807f3Z70fiqAOAIgjgCIc38XYJ2b/FjGeZTm/tLuuk9hqFEBxBEAcQRAXHQPYM3MHslxHtk8fPC67lMoZL+3Lz/aE2x755+7p6ECiCMA4giAuOgewI5Bve5ytpPJIXWMtHP1UycvFu6/+OxOsJ06N181KoA4AiCOAIhLngfwzN3Le/17/ny1Y6wd49uGCiCOAIgjAOJK7wHGj88Xvr75Yi5q/5GRG4lnVKz/5mepnz9sqADiCIA4AiCu9B6gausvzxS+fvvyzWD70q0rha/Hstf3rcHr/eH+3vqKmdlw+9DZD/97av9EBRBHAMQRAHGt6wG+r/eT9vfGYDuGl70m0l/jmLb+gQogjgCIIwDiWtcDrL6LW6MYu/+wvd+b99h37HHh61QAcQRAHAEQV3oPcG3CuX4/sMav3Ov9CFEBxBEAcQRAXHIPMGxr6HrdLXWfQqNQAcQRAHEEQFzrrgWo8eb6PVQAcQRAHAEQRwDEEQBxBEAcARCX/Mygpj0/oG1S74tIBRBHAMQRAHEEQBwBEEcAxBEAccnrAWLX4MXeOzj13sBtP16vGx4v9nkFVABxBEAcARBX+u8Cnr/dDLZjxzw7pp44PC59vNy/e6ACiCMA4giAuOT1ANau0dVg2xsT7XP5vGf0eN+z1Y/HPACiEABxBEBc5T2AHRNT78/fNPb5BLYnsD2A/f/zXrfzMt6aQSqAOAIgjgCIq/z+AHbM88ZEq2nfy2OP5x0/9lqD/d2G7QmoAOIIgDgCIC77PIAVe23AsmPgp1/7pY+X+7eYVABxBEAcARA30ANMnyp+Bk2q/sLVqP1709c5XkYLT8P7ClIBxBEAcQRAnDsPcGBn8br/95+L16nz/nrf76ECiCMA4giAuLGNtZXO3/9Q9rUB1Mv+vakA4giAOAIgruPtQE/QbHbMt6gA4giAOAIgzu0BLHqC4eaN+RYVQBwBEEcAxP0BBXUbFuwXHpMAAAAASUVORK5CYII=" | base64 -d > src/main/resources/logo.png
+          file src/main/resources/logo.png || true
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -54,6 +61,6 @@ jobs:
       - name: Upload jar
         uses: actions/upload-artifact@v4
         with:
-          name: unused-unlocked
+          name: unused-unlocked-1.2.0
           path: build/libs/*.jar
           if-no-files-found: error
