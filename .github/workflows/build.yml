@@ -28,14 +28,21 @@ jobs:
 
       - name: Build
         shell: bash
-        run: gradle build --no-daemon --console=plain 2>&1 | tee build.log
-
-      - name: Show errors
-        if: failure()
-        shell: bash
         run: |
-          echo "===== COMPILER / BUILD ERRORS ====="
-          grep -n -E "error:|What went wrong|Caused by|Could not|FAILED" -A3 build.log | head -80 | tee -a "$GITHUB_STEP_SUMMARY"
+          set +e
+          gradle build --no-daemon --console=plain > build.log 2>&1
+          status=$?
+          if [ $status -ne 0 ]; then
+            echo
+            echo "################ THE ERRORS ARE HERE ################"
+            if grep -q "error:" build.log; then
+              grep -n "error:" -A3 build.log | head -60
+            else
+              grep -n -E "What went wrong|Caused by|Could not|FAILED" -A4 build.log | head -60
+            fi
+            echo "################ END OF ERRORS ################"
+          fi
+          exit $status
 
       - name: Upload full log
         if: failure()
