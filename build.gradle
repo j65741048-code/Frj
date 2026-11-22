@@ -8,7 +8,7 @@ plugins {
     id 'net.neoforged.moddev' version '2.0.78'
 }
 
-version = '1.1.0'
+version = '1.1.1'
 group = 'com.unusedunlocked'
 
 base {
@@ -91,7 +91,7 @@ license="MIT"
 
 [[mods]]
 modId="unusedunlocked"
-version="1.1.0"
+version="1.1.1"
 displayName="Unused Unlocked"
 logoFile="logo.png"
 authors="You"
@@ -171,7 +171,6 @@ public class UnusedUnlocked {
 
 import java.util.List;
 import java.util.Optional;
-import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -186,7 +185,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.item.component.CustomData;
-import net.minecraft.world.item.component.ItemLore;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
@@ -212,10 +210,7 @@ public class BlockPlacerItem extends Item {
         tag.putString(TAG, id);
         stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
         stack.set(DataComponents.CUSTOM_NAME,
-                Component.literal("Block: ").append(block.getName()).withStyle(s -> s.withItalic(false)));
-        stack.set(DataComponents.LORE,
-                new ItemLore(List.of(Component.literal(id).withStyle(ChatFormatting.DARK_GRAY))));
-        stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
+                Component.literal("Block: ").append(block.getName()).append(Component.literal(" [" + id + "]")).withStyle(s -> s.withItalic(false)));
         return stack;
     }
 
@@ -287,7 +282,6 @@ public class BlockPlacerItem extends Item {
 
 import java.util.List;
 import java.util.Optional;
-import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
@@ -304,7 +298,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
-import net.minecraft.world.item.component.ItemLore;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
@@ -325,10 +318,7 @@ public class MobPlacerItem extends Item {
         tag.putString(TAG, id);
         stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
         stack.set(DataComponents.CUSTOM_NAME,
-                Component.literal("Mob: ").append(type.getDescription()).withStyle(s -> s.withItalic(false)));
-        stack.set(DataComponents.LORE,
-                new ItemLore(List.of(Component.literal(id).withStyle(ChatFormatting.DARK_GRAY))));
-        stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
+                Component.literal("Mob: ").append(type.getDescription()).append(Component.literal(" [" + id + "]")).withStyle(s -> s.withItalic(false)));
         return stack;
     }
 
