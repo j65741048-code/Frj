@@ -6,7 +6,7 @@ plugins {
 // Everything is defined here so no gradle.properties is needed
 def modId = 'unusedunlocked'
 def modName = 'Unused Unlocked'
-def modVersion = '1.2.1'
+def modVersion = '1.3.0'
 def modGroupId = 'com.unusedunlocked'
 def modAuthors = 'you'
 def modLicense = 'MIT'
