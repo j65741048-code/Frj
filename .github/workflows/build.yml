@@ -27,7 +27,22 @@ jobs:
           gradle-version: 8.10.2
 
       - name: Build
-        run: gradle build --no-daemon --stacktrace
+        shell: bash
+        run: gradle build --no-daemon --console=plain 2>&1 | tee build.log
+
+      - name: Show errors
+        if: failure()
+        shell: bash
+        run: |
+          echo "===== COMPILER / BUILD ERRORS ====="
+          grep -n -E "error:|What went wrong|Caused by|Could not|FAILED" -A3 build.log | head -80 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload full log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
 
       - name: Upload jar
         uses: actions/upload-artifact@v4
