@@ -3,14 +3,22 @@ plugins {
     id 'net.neoforged.moddev' version '2.0.141'
 }
 
-// Single place to bump the version
-def modVersion = '1.2.0'
+// Everything is defined here so no gradle.properties is needed
+def modId = 'unusedunlocked'
+def modName = 'Unused Unlocked'
+def modVersion = '1.2.1'
+def modGroupId = 'com.unusedunlocked'
+def modAuthors = 'you'
+def modLicense = 'MIT'
+def minecraftVersion = '1.21.1'
+def neoVersion = '21.1.172'
+def neoVersionRange = '[21.1.0,)'
 
 version = modVersion
-group = mod_group_id
+group = modGroupId
 
 base {
-    archivesName = mod_id
+    archivesName = modId
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
@@ -20,10 +28,10 @@ repositories {
 }
 
 neoForge {
-    version = neo_version
+    version = neoVersion
 
     mods {
-        "${mod_id}" {
+        "${modId}" {
             sourceSet sourceSets.main
         }
     }
@@ -31,13 +39,13 @@ neoForge {
 
 tasks.named('processResources', ProcessResources).configure {
     var replaceProperties = [
-        minecraft_version  : minecraft_version,
-        neo_version_range  : neo_version_range,
-        mod_id             : mod_id,
-        mod_name           : mod_name,
+        minecraft_version  : minecraftVersion,
+        neo_version_range  : neoVersionRange,
+        mod_id             : modId,
+        mod_name           : modName,
         mod_version        : modVersion,
-        mod_authors        : mod_authors,
-        mod_license        : mod_license
+        mod_authors        : modAuthors,
+        mod_license        : modLicense
     ]
     inputs.properties replaceProperties
     filesMatching(['META-INF/neoforge.mods.toml']) {
